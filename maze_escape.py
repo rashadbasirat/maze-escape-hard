@@ -19,6 +19,7 @@ GOLD = '#ffd166'
 WALL = '#25364f'
 FLOOR = '#101b2c'
 SCORE_FILE = Path(os.getenv('LOCALAPPDATA') or Path.home()) / 'MazeEscapeHard' / 'best_times.json'
+STAR_FILE = SCORE_FILE.with_name('best_stars.json')
 
 
 def load_records(path=SCORE_FILE):
@@ -31,6 +32,16 @@ def load_records(path=SCORE_FILE):
         return {}
 
 
+def load_stars(path=STAR_FILE):
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+        return {key: value for key, value in data.items()
+                if key in ('1', '2', '3', '4', '5') and type(value) is int
+                and 1 <= value <= 3}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
 class MazeEscape:
     def __init__(self, root):
         self.root = root
@@ -39,6 +50,7 @@ class MazeEscape:
         root.minsize(900, 700)
         root.configure(bg=BG)
         self.records = load_records()
+        self.star_records = load_stars()
         self.game = None
         self.started = None
         self.elapsed = 0
@@ -54,6 +66,7 @@ class MazeEscape:
         self.move_text = tk.StringVar(value='0')
         self.key_text = tk.StringVar(value='NOT FOUND')
         self.best_text = tk.StringVar(value='—')
+        self.targets = tk.StringVar()
         self.build_ui()
         root.bind('<KeyPress>', self.on_key)
         root.bind('<FocusOut>', self.focus_out)
@@ -121,6 +134,7 @@ class MazeEscape:
         bottom.pack(fill='x', padx=32, pady=(0, 20))
         self.label(bottom, textvariable=self.status, fg=GOLD, wraplength=980,
                    justify='left').pack(anchor='w')
+        self.label(bottom, textvariable=self.targets, fg=MUTED).pack(anchor='w', pady=(5, 0))
         self.label(bottom, 'ARROWS / WASD  Move     •     H  Hint (+30s)     •     P  Pause     •     N  New maze',
                    fg=MUTED).pack(anchor='w', pady=(9, 0))
         self.label(bottom, 'YOU  ●     KEY  ◆     EXIT  ▣     Time starts on your first move.',
@@ -157,7 +171,12 @@ class MazeEscape:
         self.move_text.set(str(self.game.moves))
         self.key_text.set('COLLECTED' if self.game.has_key else 'NOT FOUND')
         best = self.records.get(str(self.game.level))
-        self.best_text.set(self.format_time(best) if best is not None else '—')
+        stars = self.star_records.get(str(self.game.level), 0)
+        self.best_text.set((self.format_time(best) if best is not None else '—')
+                           + f'   {stars}/3 ★')
+        three = math.ceil(self.game.par_moves * 1.2)
+        two = math.ceil(self.game.par_moves * 1.6)
+        self.targets.set(f'3★: at most {three} moves  |  2★: at most {two} moves OR 60 seconds  |  Hints: 1★ maximum')
 
     def tick(self):
         self.update_stats()
@@ -232,6 +251,15 @@ class MazeEscape:
                             self.status.set('You escaped! Best time could not be saved on this computer.')
                 else:
                     self.status.set('You escaped! Finish without hints to set a level best.')
+                rating = self.game.stars(self.elapsed, self.hints)
+                level = str(self.game.level)
+                if rating > self.star_records.get(level, 0):
+                    self.star_records[level] = rating
+                    try:
+                        STAR_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        STAR_FILE.write_text(json.dumps(self.star_records, indent=2), encoding='utf-8')
+                    except OSError:
+                        self.status.set('You escaped! Your star rating could not be saved on this computer.')
         self.update_stats()
         self.draw()
 
@@ -305,16 +333,22 @@ class MazeEscape:
             c.create_rectangle(ox, oy, ox+maze.width*size, oy+maze.height*size,
                                fill=BG, stipple='gray75', outline='')
             box_width = min(470, cw - 40)
-            c.create_rectangle(cw/2-box_width/2, ch/2-95, cw/2+box_width/2, ch/2+95,
+            c.create_rectangle(cw/2-box_width/2, ch/2-115, cw/2+box_width/2, ch/2+115,
                                fill=PANEL, outline=MINT, width=1)
             title = ('LEVEL FIVE COMPLETE' if self.game.won and self.game.level == 5
                      else 'YOU ESCAPED' if self.game.won else 'TAKE A BREATHER')
-            c.create_text(cw/2, ch/2-45, text=title, fill=MINT, font=('Segoe UI Semibold', 25))
+            c.create_text(cw/2, ch/2-72, text=title, fill=MINT, font=('Segoe UI Semibold', 23))
+            if self.game.won:
+                rating = self.game.stars(self.elapsed, self.hints)
+                for index in range(3):
+                    c.create_text(cw/2 + (index-1)*52, ch/2-25, text='★',
+                                  fill=GOLD if index < rating else '#42516a',
+                                  font=('Segoe UI', 31))
             detail = (f'{self.format_time(self.elapsed)}  /  {self.game.moves} moves  /  {self.hints} hints'
                       if self.game.won else 'Your clock is paused.')
-            c.create_text(cw/2, ch/2, text=detail, fill=TEXT, font=('Segoe UI', 13))
+            c.create_text(cw/2, ch/2+24 if self.game.won else ch/2, text=detail, fill=TEXT, font=('Segoe UI', 13))
             action = ('Press ENTER for the next maze' if self.game.level < 5 else 'Press ENTER to replay level 5') if self.game.won else 'Press P or click Resume to continue'
-            c.create_text(cw/2, ch/2+44, text=action, fill=MUTED, font=('Segoe UI', 11))
+            c.create_text(cw/2, ch/2+74, text=action, fill=MUTED, font=('Segoe UI', 11))
 
 
 if __name__ == '__main__':

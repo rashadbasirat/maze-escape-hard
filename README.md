@@ -61,6 +61,23 @@ Saved scores go in `%LOCALAPPDATA%\MazeEscapeHard\best_times.json` on Windows,
 or a `MazeEscapeHard` folder in your home directory when LOCALAPPDATA is unavailable.
 Each difficulty has its own best time. Layouts vary, so times are for casual play.
 
+## Stars
+
+Each completed maze earns 1, 2, or 3 stars. The move targets are shown below the
+maze, and change with the random layout. The shortest route includes visiting
+the key and then the exit; the player is not expected to know it in advance.
+
+| Rating | Requirement |
+| --- | --- |
+| 3 stars | No hints, and no more than 120% of the shortest route's moves |
+| 2 stars | No hints, and no more than 160% of the shortest route's moves, OR finish within 60 seconds without hints |
+| 1 star | Finish the maze; a run using hints is capped at 1 star |
+
+Move limits round up to whole moves. The highest matching rating wins, so an
+efficient run still gets 3 stars even if it takes more than a minute. Time starts
+on the first move and excludes pauses. Your best star rating per level is saved
+in `best_stars.json` next to your saved times. The victory screen shows the stars.
+
 ## Credit and project status
 
 Created for Rashad Basirat with OpenAI Codex assistance. This is a solo project.

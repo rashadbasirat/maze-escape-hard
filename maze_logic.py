@@ -1,6 +1,7 @@
 """Maze generation and game rules, independent of the graphical interface."""
 
 from collections import deque
+import math
 import random
 
 LEVELS = [
@@ -96,11 +97,24 @@ class Game:
             if length >= minimum_steps:
                 break
         self.maze = best_maze
+        self.par_moves = best_length
         self.position = self.maze.start
         self.has_key = False
         self.won = False
         self.moves = 0
         self.visited = {self.position}
+
+    def stars(self, seconds, hints=0):
+        """Rate a finished run against this maze's shortest key-and-exit route."""
+        if not self.won:
+            return 0
+        if hints:
+            return 1
+        if self.moves <= math.ceil(self.par_moves * 1.2):
+            return 3
+        if self.moves <= math.ceil(self.par_moves * 1.6) or seconds <= 60:
+            return 2
+        return 1
 
     def move(self, dx, dy):
         """Return 'wall', 'locked', 'key', 'win', or 'move'."""
