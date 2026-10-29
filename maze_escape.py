@@ -25,7 +25,7 @@ STAR_FILE = SCORE_FILE.with_name('best_stars.json')
 def load_records(path=SCORE_FILE):
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
-        return {k: v for k, v in data.items() if k in ('1', '2', '3', '4', '5')
+        return {k: v for k, v in data.items() if k in ('1', '2', '3', '4', '5', '5-abyss')
                 and isinstance(v, (int, float)) and not isinstance(v, bool)
                 and math.isfinite(v) and v >= 0}
     except (OSError, ValueError, AttributeError):
@@ -36,7 +36,7 @@ def load_stars(path=STAR_FILE):
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
         return {key: value for key, value in data.items()
-                if key in ('1', '2', '3', '4', '5') and type(value) is int
+                if key in ('1', '2', '3', '4', '5', '5-abyss') and type(value) is int
                 and 1 <= value <= 3}
     except (OSError, ValueError, AttributeError):
         return {}
@@ -113,9 +113,10 @@ class MazeEscape:
         self.pause_button.pack(side='left', padx=(0, 8))
         self.hint_button = self.button(toolbar, 'Hint  [H]', self.show_hint)
         self.hint_button.pack(side='left')
-        tk.Checkbutton(toolbar, text='Show trail', variable=self.trail, command=self.draw,
+        self.trail_button = tk.Checkbutton(toolbar, text='Show trail', variable=self.trail, command=self.draw,
                        bg=BG, fg=MUTED, selectcolor=PANEL, activebackground=BG,
-                       activeforeground=TEXT, font=('Segoe UI', 10)).pack(side='right')
+                       activeforeground=TEXT, font=('Segoe UI', 10))
+        self.trail_button.pack(side='right')
         stats = tk.Frame(self.root, bg=PANEL)
         stats.pack(fill='x', padx=32)
         for name, variable in [('TIME', self.clock), ('MOVES', self.move_text),
@@ -150,7 +151,13 @@ class MazeEscape:
         self.hints = 0
         self.hint_generation += 1
         self.pause_button.configure(text='Pause  [P]')
-        self.status.set('Find the golden key, then reach the green gate. Click the maze to focus.')
+        abyss = self.game.level == 5
+        self.hint_button.configure(state='disabled' if abyss else 'normal')
+        self.trail_button.configure(state='disabled' if abyss else 'normal')
+        if abyss:
+            self.trail.set(False)
+        self.status.set('THE ABYSS: Find 3 keys. Beware false gates. No hints or trail. Your torch is all you have.'
+                        if abyss else 'Find the golden key, then reach the green gate. Click the maze to focus.')
         self.update_stats()
         self.draw()
         self.canvas.focus_set()
@@ -169,14 +176,18 @@ class MazeEscape:
     def update_stats(self):
         self.clock.set(self.format_time(self.current_time()))
         self.move_text.set(str(self.game.moves))
-        self.key_text.set('COLLECTED' if self.game.has_key else 'NOT FOUND')
-        best = self.records.get(str(self.game.level))
-        stars = self.star_records.get(str(self.game.level), 0)
+        self.key_text.set(f'{len(self.game.collected_keys)} / 3 FOUND' if self.game.level == 5
+                          else 'COLLECTED' if self.game.has_key else 'NOT FOUND')
+        # The redesigned final level uses a different record slot from its old layout.
+        record_key = '5-abyss' if self.game.level == 5 else str(self.game.level)
+        best = self.records.get(record_key)
+        stars = self.star_records.get(record_key, 0)
         self.best_text.set((self.format_time(best) if best is not None else '—')
                            + f'   {stars}/3 ★')
         three = math.ceil(self.game.par_moves * 1.2)
         two = math.ceil(self.game.par_moves * 1.6)
-        self.targets.set(f'3★: at most {three} moves  |  2★: at most {two} moves OR 60 seconds  |  Hints: 1★ maximum')
+        self.targets.set(f'3★: ≤ {three} moves  |  2★: ≤ {two} moves OR 60 seconds  |  '
+                         + ('Level 5: torchlight only' if self.game.level == 5 else 'Hints: 1★ maximum'))
 
     def tick(self):
         self.update_stats()
@@ -229,20 +240,25 @@ class MazeEscape:
         if result == 'wall':
             return
         if result == 'locked':
-            self.status.set('The gate is locked. Find the golden key first.')
+            self.status.set(f'The gate is locked. Find all 3 keys first ({len(self.game.collected_keys)}/3).'
+                            if self.game.level == 5 else 'The gate is locked. Find the golden key first.')
         else:
             if self.started is None:
                 self.started = time.monotonic()
             self.hint_route = []
             if result == 'key':
-                self.status.set('Key collected! The green gate is now unlocked.')
+                self.status.set('All keys collected! Find the real exit gate.' if self.game.has_key
+                                else f'Key found: {len(self.game.collected_keys)}/3. Keep exploring the darkness.')
+            elif result == 'decoy':
+                self.status.set('A FALSE GATE. This dead end was a trick. Find another way.')
             elif result == 'win':
                 # Freeze elapsed time before rendering the victory panel.
                 self.elapsed = time.monotonic() - self.started + self.hints * 30
                 if not self.hints:
-                    previous = self.records.get(str(self.game.level), float('inf'))
+                    record_key = '5-abyss' if self.game.level == 5 else str(self.game.level)
+                    previous = self.records.get(record_key, float('inf'))
                     if self.elapsed < previous:
-                        self.records[str(self.game.level)] = self.elapsed
+                        self.records[record_key] = self.elapsed
                         try:
                             SCORE_FILE.parent.mkdir(parents=True, exist_ok=True)
                             SCORE_FILE.write_text(json.dumps(self.records, indent=2), encoding='utf-8')
@@ -252,7 +268,7 @@ class MazeEscape:
                 else:
                     self.status.set('You escaped! Finish without hints to set a level best.')
                 rating = self.game.stars(self.elapsed, self.hints)
-                level = str(self.game.level)
+                level = '5-abyss' if self.game.level == 5 else str(self.game.level)
                 if rating > self.star_records.get(level, 0):
                     self.star_records[level] = rating
                     try:
@@ -265,6 +281,9 @@ class MazeEscape:
 
     def show_hint(self):
         if self.paused or self.game.won:
+            return
+        if self.game.level == 5:
+            self.status.set('No hints in The Abyss. Remember the turns and search for all 3 keys.')
             return
         if self.started is None:
             self.started = time.monotonic()
@@ -297,17 +316,25 @@ class MazeEscape:
         cw, ch = c.winfo_width(), c.winfo_height()
         if cw < 10 or ch < 10:
             return
-        size = max(5, min((cw - 12) / maze.width, (ch - 12) / maze.height))
-        ox = (cw - size * maze.width) / 2
-        oy = (ch - size * maze.height) / 2
-        for y in range(maze.height):
-            for x in range(maze.width):
+        visible = self.game.visible_tiles()
+        columns, rows = (21, 15) if self.game.level == 5 else (maze.width, maze.height)
+        size = max(5, min((cw - 12) / columns, (ch - 12) / rows))
+        board_left, board_top = (cw - size * columns) / 2, (ch - size * rows) / 2
+        camera_x = max(0, min(maze.width - columns, self.game.position[0] - columns // 2))
+        camera_y = max(0, min(maze.height - rows, self.game.position[1] - rows // 2))
+        ox, oy = board_left - camera_x * size, board_top - camera_y * size
+        c.create_rectangle(board_left, board_top, board_left+columns*size, board_top+rows*size,
+                           fill='#060b14', outline=WALL)
+        for y in range(camera_y, camera_y + rows):
+            for x in range(camera_x, camera_x + columns):
+                if visible is not None and (x, y) not in visible:
+                    continue
                 left, top = ox + x * size, oy + y * size
                 color = FLOOR if (x, y) in maze.floor else WALL
                 c.create_rectangle(left, top, left + size + 1, top + size + 1, fill=color, outline='')
         def center(position):
             return ox + (position[0] + .5) * size, oy + (position[1] + .5) * size
-        if self.trail.get():
+        if self.trail.get() and self.game.level != 5:
             for position in self.game.visited - {self.game.position}:
                 x, y = center(position)
                 r = max(1.5, size * .065)
@@ -316,13 +343,20 @@ class MazeEscape:
             x, y = center(position)
             r = size * .12
             c.create_oval(x - r, y - r, x + r, y + r, fill=GOLD, outline='')
-        x, y = center(maze.exit)
-        r = size * .35
-        c.create_rectangle(x-r, y-r, x+r, y+r, fill='#194d43', outline=MINT, width=2)
-        if not self.game.has_key:
-            for shift in (-.12, .12):
-                c.create_line(x + size*shift, y-r, x + size*shift, y+r, fill=MINT, width=2)
-            x, y = center(maze.key)
+        for gate in self.game.decoys | {maze.exit}:
+            if visible is not None and gate not in visible:
+                continue
+            x, y = center(gate)
+            r = size * .35
+            color = '#f08080' if gate in self.game.revealed_decoys else MINT
+            c.create_rectangle(x-r, y-r, x+r, y+r, fill='#194d43', outline=color, width=2)
+            if not self.game.has_key:
+                for shift in (-.12, .12):
+                    c.create_line(x + size*shift, y-r, x + size*shift, y+r, fill=color, width=2)
+        for key in self.game.keys - self.game.collected_keys:
+            if visible is not None and key not in visible:
+                continue
+            x, y = center(key)
             r = size * .27
             c.create_polygon(x, y-r, x+r, y, x, y+r, x-r, y, fill=GOLD, outline='')
         x, y = center(self.game.position)
@@ -330,7 +364,7 @@ class MazeEscape:
         c.create_oval(x-r-3, y-r-3, x+r+3, y+r+3, fill='#23566a', outline='')
         c.create_oval(x-r, y-r, x+r, y+r, fill=MINT, outline='')
         if self.paused or self.game.won:
-            c.create_rectangle(ox, oy, ox+maze.width*size, oy+maze.height*size,
+            c.create_rectangle(board_left, board_top, board_left+columns*size, board_top+rows*size,
                                fill=BG, stipple='gray75', outline='')
             box_width = min(470, cw - 40)
             c.create_rectangle(cw/2-box_width/2, ch/2-115, cw/2+box_width/2, ch/2+115,

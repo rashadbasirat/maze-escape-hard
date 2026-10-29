@@ -1,6 +1,7 @@
 """Maze generation and game rules, independent of the graphical interface."""
 
 from collections import deque
+from itertools import permutations
 import math
 import random
 
@@ -9,7 +10,7 @@ LEVELS = [
     ('2 - Brutal', 29, 19, 150),
     ('3 - Extreme', 33, 21, 200),
     ('4 - Nightmare', 37, 23, 250),
-    ('5 - The Abyss', 41, 25, 300),
+    ('5 - The Abyss', 61, 35, 650),
 ]
 
 
@@ -98,6 +99,30 @@ class Game:
                 break
         self.maze = best_maze
         self.par_moves = best_length
+        self.keys = {self.maze.key}
+        self.collected_keys = set()
+        self.decoys = set()
+        self.revealed_decoys = set()
+        if level == 5:
+            # Spread the keys across dead ends, forcing exploration and backtracking.
+            ends = {p for p in self.maze.floor if len(self.maze.neighbors(p)) == 1
+                    and p not in (self.maze.start, self.maze.exit)}
+            distances = [self.maze.distances(p) for p in
+                         (self.maze.start, self.maze.exit, self.maze.key)]
+            while len(self.keys) < 3:
+                choices = ends - self.keys
+                key = max(choices, key=lambda p: min(d[p] for d in distances))
+                self.keys.add(key)
+                distances.append(self.maze.distances(key))
+            choices = sorted(ends - self.keys)
+            self.decoys = set(rng.sample(choices, min(6, len(choices))))
+            # Only three keys: checking all six orders gives the exact move target.
+            routes = {p: self.maze.distances(p) for p in self.keys | {self.maze.start}}
+            self.par_moves = min(
+                routes[self.maze.start][order[0]]
+                + sum(routes[a][b] for a, b in zip(order, order[1:]))
+                + routes[order[-1]][self.maze.exit]
+                for order in permutations(self.keys))
         self.position = self.maze.start
         self.has_key = False
         self.won = False
@@ -117,7 +142,7 @@ class Game:
         return 1
 
     def move(self, dx, dy):
-        """Return 'wall', 'locked', 'key', 'win', or 'move'."""
+        """Return 'wall', 'locked', 'key', 'decoy', 'win', or 'move'."""
         if self.won or (dx, dy) not in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             return 'wall'
         target = self.position[0] + dx, self.position[1] + dy
@@ -128,10 +153,36 @@ class Game:
         self.position = target
         self.moves += 1
         self.visited.add(target)
-        if target == self.maze.key and not self.has_key:
-            self.has_key = True
+        if target in self.keys and target not in self.collected_keys:
+            self.collected_keys.add(target)
+            self.has_key = self.collected_keys == self.keys
             return 'key'
         if target == self.maze.exit:
             self.won = True
             return 'win'
+        if target in self.decoys and target not in self.revealed_decoys:
+            self.revealed_decoys.add(target)
+            return 'decoy'
         return 'move'
+
+    def visible_tiles(self):
+        """Level 5's torch lights four passage steps and their bordering walls."""
+        if self.level != 5:
+            return None
+        distances = {self.position: 0}
+        queue = deque([self.position])
+        while queue:
+            current = queue.popleft()
+            if distances[current] == 4:
+                continue
+            for neighbor in self.maze.neighbors(current):
+                if neighbor not in distances:
+                    distances[neighbor] = distances[current] + 1
+                    queue.append(neighbor)
+        visible = set(distances)
+        for x, y in distances:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                p = x + dx, y + dy
+                if p not in self.maze.floor:
+                    visible.add(p)
+        return visible

@@ -37,11 +37,25 @@ to another app. Best times save on your computer, not online.
 | 2 | Brutal | 29 x 19 |
 | 3 | Extreme | 33 x 21 |
 | 4 | Nightmare | 37 x 23 |
-| 5 | The Abyss | 41 x 25 |
+| 5 | The Abyss | 61 x 35 |
 
 All five are meant to be hard. The game looks for long routes when generating
 a maze. The trail starts turned off, and each level has more passages to explore.
 The exit is locked until you pick up the key. Walls cannot be crossed.
+
+### Level 5: The Abyss
+
+The last level is much harder than the others. You need **three keys** scattered
+across a much larger maze. Only a small torchlit area is visible, and the camera
+follows your position. Areas go dark again when you walk away, so remember turns.
+Your torch follows passages and does not reveal corridors through walls.
+
+Six false exit gates can lead you to dead ends. A false gate turns red when you
+step on it; it never wins the game. The real exit opens only after all three keys
+are collected, in any order. **Hints and the trail are disabled on level 5.**
+There is no countdown and no randomly moving wall: every generated maze has a
+valid solution. Level 5 gets a new best-time/rating record so old, easier runs do
+not count against the redesigned challenge.
 
 You can choose any level from the dropdown or play them in order. Winning level 5
 finishes that maze; Enter creates another level-5 maze.
@@ -65,7 +79,8 @@ Each difficulty has its own best time. Layouts vary, so times are for casual pla
 
 Each completed maze earns 1, 2, or 3 stars. The move targets are shown below the
 maze, and change with the random layout. The shortest route includes visiting
-the key and then the exit; the player is not expected to know it in advance.
+the key and then the exit; on level 5 it includes all three keys in the best
+order before the exit. The player is not expected to know it in advance.
 
 | Rating | Requirement |
 | --- | --- |
