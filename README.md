@@ -93,8 +93,4 @@ efficient run still gets 3 stars even if it takes more than a minute. Time start
 on the first move and excludes pauses. Your best star rating per level is saved
 in `best_stars.json` next to your saved times. The victory screen shows the stars.
 
-## Credit and project status
 
-Created for Rashad Basirat with OpenAI Codex assistance. This is a solo project.
-The source and README should be reviewed and personalized before use as coursework.
-The required demo video will be recorded later. Nothing has been submitted to Canvas.
